@@ -39,6 +39,108 @@ Across Wikimedia projects, there is a massive multimedia knowledge gap: **thousa
 
 ---
 
+## 🗺️ How It Works: Visual Flowcharts for New Wiki Users
+
+The toolchain is organized into two intuitive phases, each with its own visual guide:
+
+---
+
+### 1. 🔍 Finding Missing Photos (`find_missing_photos.py`)
+
+This phase crawls a Wikipedia category, checks for missing photos, verifies Commons licensing, and discovers linked sibling language wikis:
+
+<p align="center">
+  <a href="docs/find_photos_flow.png"><img src="docs/find_photos_flow.svg" alt="Finding Missing Photos Workflow Diagram" width="100%"/></a>
+</p>
+
+---
+
+### 2. ✏️ Reviewing & Multi-Wiki Publishing (`update_wiki.py`)
+
+This phase provides in-terminal Sixel photo verification, color diff review, and 1-click publishing to Tamil Wikipedia, sibling language wikis, and Wikidata Property P18:
+
+<p align="center">
+  <a href="docs/update_wiki_flow.png"><img src="docs/update_wiki_flow.svg" alt="Multi-Wiki Publishing Workflow Diagram" width="100%"/></a>
+</p>
+
+---
+
+### 📊 Complete Interactive Mermaid Chart
+
+<details>
+<summary><b>Click to expand full interactive Mermaid flowchart</b></summary>
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'fontFamily': '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif', 'primaryColor': '#ffffff', 'primaryTextColor': '#0f172a', 'primaryBorderColor': '#cbd5e1', 'lineColor': '#64748b', 'edgeLabelBackground': '#ffffff' }}}%%
+flowchart TD
+    classDef startEnd fill:#1e293b,stroke:#0f172a,stroke-width:2px,color:#ffffff,font-weight:bold,rx:10,ry:10;
+    classDef stepNode fill:#ffffff,stroke:#3b82f6,stroke-width:1.5px,color:#0f172a,rx:8,ry:8;
+    classDef decisionNode fill:#fffbeb,stroke:#f59e0b,stroke-width:1.5px,color:#92400e,rx:6,ry:6;
+    classDef successNode fill:#ecfdf5,stroke:#10b981,stroke-width:1.5px,color:#065f46,font-weight:bold,rx:8,ry:8;
+    classDef warnNode fill:#fff1f2,stroke:#f43f5e,stroke-width:1.5px,color:#9f1239,rx:8,ry:8;
+    classDef actionNode fill:#eff6ff,stroke:#6366f1,stroke-width:1.5px,color:#312e81,font-weight:600,rx:8,ry:8;
+
+    subgraph Discovery["Phase 1: Finding Missing Photos (find_missing_photos.py)"]
+        A["Start: Wikipedia Category (e.g. பகுப்பு:வாழும்_மக்கள்)"]:::startEnd --> B["Crawl Articles in Category"]:::stepNode
+        B --> C{"Tamil Article Has Photo?"}:::decisionNode
+        C -- "Yes" --> C_Skip["Skip: Already Has Photo"]:::warnNode
+        C -- "No" --> D["Match English Article via Wikidata/Langlinks"]:::stepNode
+        D --> E{"English Article Has Photo?"}:::decisionNode
+        E -- "No" --> E_Skip["Skip: No Photo in English Article"]:::warnNode
+        E -- "Yes" --> F{"Hosted on Wikimedia Commons?"}:::decisionNode
+        F -- "No: Local Fair Use" --> F_Local["Flag: Local enwiki (Requires Commons Upload)"]:::warnNode
+        F -- "Yes: Freely Licensed" --> G["Query Sibling Wikis (ml, te, kn, hi, bn, mr, etc.)"]:::successNode
+        G --> H["Save to Results (results.json, report.html, report.md)"]:::successNode
+    end
+
+    subgraph Review["Phase 2: Review & Multi-Wiki Publishing (update_wiki.py)"]
+        H --> I["Load Results and Session Progress State"]:::stepNode
+        I --> J["Render Sixel Image Preview in Terminal (chafa)"]:::stepNode
+        J --> K["Display Proposed Color Wikitext Diff"]:::stepNode
+        K --> L{"Editor Choice at Terminal Prompt"}:::decisionNode
+        L -- "y: Primary Wiki" --> M["Publish to Tamil Wikipedia"]:::actionNode
+        L -- "a: All Missing" --> N["Publish to ALL Missing Wikis + Wikidata P18"]:::successNode
+        L -- "c: Choose" --> O["Publish to Custom Selected Wikis (e.g. ta, ml)"]:::actionNode
+        L -- "w: Wikidata Only" --> P["Add Property P18 to Wikidata Item"]:::actionNode
+        L -- "b: Wiki + Wikidata" --> Q["Publish to Tamil Wiki + Wikidata P18"]:::actionNode
+        L -- "n: Skip" --> R["Mark Skipped for Later Review"]:::warnNode
+        L -- "q: Quit" --> S["Save State to progress.json and Exit Safely"]:::startEnd
+        M --> T["Record Progress in progress.json (Resumable)"]:::stepNode
+        N --> T
+        O --> T
+        P --> T
+        Q --> T
+        R --> T
+        T --> U{"More Articles in Queue?"}:::decisionNode
+        U -- "Yes" --> I
+        U -- "No" --> V["Done: Complete Session Summary"]:::successNode
+    end
+```
+</details>
+
+### 🔰 Step-by-Step Explanation for Beginners
+
+1. **Category Crawling:**
+   * Wikipedia organizes related articles into categories (e.g., `பகுப்பு:இந்திய எழுத்தாளர்கள்` for Indian writers).
+   * The tool queries the MediaWiki API to list all articles in the specified category (and optionally subcategories).
+
+2. **Language Matching & Commons Verification:**
+   * For every Tamil article that lacks an image, the tool checks its English counterpart.
+   * If the English article has a photo, the tool inspects where that image is hosted:
+     * **Wikimedia Commons (Shared):** Free license (CC-BY-SA, Public Domain). Ready to use immediately across all Wikimedia projects!
+     * **Local English Wikipedia (Fair Use):** Restricted under US Fair Use. Cannot be directly linked in other wikis until a free version is uploaded to Commons.
+
+3. **Multi-Language Exploration:**
+   * Using Wikidata's knowledge graph, the tool discovers if the same person/topic has articles in Malayalam (`ml`), Telugu (`te`), Kannada (`kn`), Hindi (`hi`), Bengali (`bn`), Marathi (`mr`), Punjabi (`pa`), Urdu (`ur`), etc.
+   * It checks each language edition to see if it also lacks the photo.
+
+4. **Visual Review & Publishing:**
+   * The terminal displays the actual photo using **Sixel graphics** (via `chafa`) alongside a colored wikitext diff.
+   * You choose whether to update just the Tamil article (`y`), **all missing language editions at once (`a`)**, add the photo to **Wikidata Property P18 (`w`)**, or skip (`n`).
+   * **Take breaks anytime:** Pressing `q` or `Ctrl+C` saves your exact place in `<filename>.progress.json`. When you resume, it skips all previously completed articles!
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Installation
@@ -259,6 +361,43 @@ Open `report.html` in your web browser to:
 ```bash
 python3 update_wiki.py --from-file results.json --interactive --retry-skipped
 ```
+
+---
+
+## 🛡️ Wikimedia Server Etiquette & Anti-DOS Protection
+
+WikiPhotoFinder is built to operate as a polite, robust citizen of the Wikimedia API ecosystem, strictly adhering to [Wikimedia User-Agent and Bot Policies](https://meta.wikimedia.org/wiki/User-Agent_policy):
+
+### 1. Polite Request Pacing (`--delay`)
+- **Default:** `1.0s` between consecutive API requests.
+- Helps ensure your bot never floods Squid/Varnish caching layers or triggers automated IP throttling.
+- Can be customized with `--delay 2.0` for extra-gentle background runs.
+
+### 2. Database Replication Lag Monitoring (`--maxlag`)
+- **Default:** `5` seconds.
+- MediaWiki uses the `maxlag` parameter to inform clients when backend database replicas are lagging behind the primary master.
+- When replication lag exceeds the threshold, Wikimedia returns an HTTP 200 response with `{"error": {"code": "maxlag"}}` and a `Retry-After` header.
+- **Smart Retries:** The tool automatically pauses for the duration specified by the server (with exponential backoff) and retries up to 5 times.
+- **Smart Wikidata Handling:** On Wikidata, read-only `wbgetentities` lookups read directly from the main database and object cache. However, Wikidata's separate Query Service (WDQS) frequently has baseline replication lag of 5–30 seconds. WikiPhotoFinder intelligently bypasses `maxlag` on read-only Wikidata lookups to avoid false-positive rejections, while strictly maintaining `maxlag=5` for all database-modifying edit operations (`wbcreateclaim` and `action=edit`).
+
+### 3. HTTP 429 & 503 Exponential Backoff
+- Automatically catches HTTP 429 ("Too Many Requests") and HTTP 503 ("Service Unavailable").
+- Extracts the standard `Retry-After` header and backs off exponentially before retrying.
+
+### 4. HTTP POST Batching (No HTTP 414 "URI Too Long")
+- When querying batches of 50 multi-byte Unicode article titles (e.g. Tamil script), standard `GET` URLs easily exceed the 8 KB proxy URI limit.
+- WikiPhotoFinder automatically executes batch queries via HTTP `POST`, completely eliminating HTTP 414 errors.
+
+### 5. Isolated Sibling Wiki Enrichment
+- When running `--check-linked-wikis`, the cross-wiki sitelink lookup is safely isolated.
+- If Wikidata or an individual sister wiki experiences temporary upstream lag or network timeouts, the tool logs a warning and proceeds with your primary category findings without losing data.
+
+### 6. Transparent User-Agent Identification (`--user-agent`)
+- Automatically formats your `User-Agent` header to identify your bot account and tool:
+  ```text
+  WikiPhotoFinder/1.1 (https://ta.wikipedia.org/wiki/User:<username>; Multi-Wiki Photo Tool)
+  ```
+- Allows Wikimedia system administrators to identify and contact you if needed.
 
 ---
 

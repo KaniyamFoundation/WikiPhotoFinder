@@ -122,6 +122,7 @@ class WikidataClient:
                 "ids": "|".join(chunk),
                 "props": "sitelinks",
                 "format": "json",
+                "maxlag": None,
             }
             res = self.mw_client._post(self.WIKIDATA_API_URL, data)
             entities = res.get("entities", {})
@@ -172,6 +173,7 @@ class WikidataClient:
                 "ids": "|".join(chunk),
                 "props": "claims",
                 "format": "json",
+                "maxlag": None,
             }
             res = self.mw_client._post(self.WIKIDATA_API_URL, data)
             entities = res.get("entities", {})

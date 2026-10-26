@@ -181,11 +181,15 @@ class WikiPhotoFinder:
             results = [r for r in results if r.is_on_commons]
 
         if check_linked_wikis and results:
-            self.check_linked_wikis_for_results(
-                results,
-                target_wikis=target_wikis,
-                progress_callback=progress_callback,
-            )
+            try:
+                self.check_linked_wikis_for_results(
+                    results,
+                    target_wikis=target_wikis,
+                    progress_callback=progress_callback,
+                )
+            except Exception:
+                # Sibling check is an enrichment step; never lose the primary results
+                pass
 
         if progress_callback:
             progress_callback("complete", len(results), len(results))
@@ -221,7 +225,11 @@ class WikiPhotoFinder:
         if progress_callback:
             progress_callback("fetching_sitelinks", 0, len(qids))
 
-        sitelinks_by_qid = wd_client.get_sitelinks(qids, target_wikis=filter_wikis)
+        try:
+            sitelinks_by_qid = wd_client.get_sitelinks(qids, target_wikis=filter_wikis)
+        except Exception:
+            # If Wikidata sitelinks batch query fails, return gracefully
+            return
 
         # Map QID to ArticleResult
         results_by_qid: Dict[str, List[ArticleResult]] = {}

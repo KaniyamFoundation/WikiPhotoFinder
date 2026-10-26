@@ -42,9 +42,20 @@ class MediaWikiClient:
         """Execute HTTP request with Wikimedia etiquette, rate limiting, and maxlag backoff."""
         payload = dict(payload)
         payload["format"] = "json"
-        if self.maxlag > 0 and "maxlag" not in payload:
-            payload["maxlag"] = self.maxlag
 
+        # Handle maxlag parameter:
+        # If explicitly passed as None or <= 0, remove it.
+        # For Wikidata read-only queries (like wbgetentities), avoid default maxlag
+        # because WDQS query service replication lag triggers false positives.
+        if "maxlag" in payload:
+            if payload["maxlag"] is None or payload["maxlag"] <= 0:
+                del payload["maxlag"]
+        elif self.maxlag > 0:
+            is_wikidata_read = "wikidata.org" in url and payload.get("action") == "wbgetentities"
+            if not is_wikidata_read:
+                payload["maxlag"] = self.maxlag
+
+        last_error = "unknown error"
         for attempt in range(self.max_retries):
             # Polite delay between consecutive requests to avoid overwhelming servers
             if self.request_delay > 0:
@@ -58,6 +69,7 @@ class MediaWikiClient:
 
                 # Handle HTTP 429 (Too Many Requests) or 503 (Service Unavailable)
                 if response.status_code in (429, 503):
+                    last_error = f"HTTP {response.status_code}"
                     retry_header = response.headers.get("Retry-After")
                     wait_time = int(retry_header) if retry_header and retry_header.isdigit() else max(5, 2 ** attempt)
                     time.sleep(wait_time)
@@ -68,6 +80,8 @@ class MediaWikiClient:
 
                 # Handle Wikimedia database replication lag (maxlag)
                 if "error" in json_data and json_data["error"].get("code") == "maxlag":
+                    lag_info = json_data["error"].get("info", "Database lag")
+                    last_error = f"maxlag: {lag_info}"
                     retry_header = response.headers.get("Retry-After")
                     wait_time = int(retry_header) if retry_header and retry_header.isdigit() else 5
                     time.sleep(wait_time)
@@ -75,12 +89,13 @@ class MediaWikiClient:
 
                 return json_data
 
-            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                last_error = str(e)
                 if attempt == self.max_retries - 1:
                     raise
                 time.sleep((2 ** attempt) * 2)
 
-        raise RuntimeError(f"Wikimedia API request failed after {self.max_retries} attempts: {url}")
+        raise RuntimeError(f"Wikimedia API request failed after {self.max_retries} attempts ({last_error}): {url}")
 
     def _get(self, url: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a GET request with error handling and rate limiting."""
