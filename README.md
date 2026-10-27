@@ -563,6 +563,7 @@ Test coverage includes:
 3. **🧹 Maintenance Tag Cleanup (`{{படிமம் தேவை}}`):** When adding a photo, automatically detect and remove maintenance tags (`{{படிமம் தேவை}}`, `{{Needs_Image}}`, `{{No image}}`) in the same edit.
 4. **✂️ Toolforge CropTool Integration:** Direct `[c]rop` prompt option opening [CropTool](https://croptool.toolforge.org/) to allow editors to crop clean portrait headshots from group photos before embedding.
 5. **📊 Community Reports on Wikipedia Project Pages:** Automatically publish monthly contribution and missing photo reports directly to community project pages (e.g. `விக்கிப்பீடியா:விக்கித்திட்டம் புகைப்படங்கள்`).
+6. **🌐 Web Application on Wikimedia Toolforge (Wiki Cloud):** Full-featured web app with Wikipedia SSO / OAuth 2.0, multi-language selector (any source wiki → any target wiki), split-screen visual review (left: image & license, right: wikitext diff), and 1-click approvals. See the complete architectural plan in [TODO.md](TODO.md).
 
 ---
 
