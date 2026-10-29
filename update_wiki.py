@@ -32,6 +32,7 @@ import getpass
 import json
 import os
 import sys
+import time
 from typing import Optional, List, Dict, Any, Set
 
 from wiki_photos.updater import WikiUpdater, TamilWikiUpdater, MultiWikiUpdater
@@ -521,7 +522,12 @@ def main():
                     updated_any = True
 
             # 2. Update Selected Wikipedia Editions
-            for w in chosen_wikis:
+            successful_wikis = []
+            for idx, w in enumerate(chosen_wikis):
+                # Pacing delay between consecutive edits to avoid cross-wiki rate limiting
+                if idx > 0 and not args.dry_run:
+                    time.sleep(max(2.5, args.delay))
+
                 w_title = all_missing_wikis.get(w)
                 if not w_title:
                     continue
@@ -546,6 +552,7 @@ def main():
                             print(line)
                     print(f"[Dry-run] Would publish edit to '{w_title}' on {w}.wikipedia.org")
                     updated_any = True
+                    successful_wikis.append(w)
                 else:
                     try:
                         print(f"Publishing edit to '{w_title}' on {w}.wikipedia.org...")
@@ -558,12 +565,14 @@ def main():
                         new_revid = w_resp.get("newrevid")
                         print(f"[✓] Published to {w}.wikipedia.org! (Revision: {new_revid or 'ok'})")
                         updated_any = True
+                        successful_wikis.append(w)
                     except Exception as e:
                         print(f"[✗] Failed to edit '{w_title}' on {w}.wikipedia.org: {e}")
 
             if updated_any:
                 if progress_mgr and not args.dry_run:
-                    progress_mgr.mark_updated(title, image, f"wikis:{','.join(chosen_wikis)}")
+                    recorded_wikis = successful_wikis if successful_wikis else chosen_wikis
+                    progress_mgr.mark_updated(title, image, f"wikis:{','.join(recorded_wikis)}")
                 session_updated += 1
             else:
                 if progress_mgr and not args.dry_run:

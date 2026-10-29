@@ -65,3 +65,25 @@ def test_updater_edit_page_mock():
         res = updater.edit_page("Test", "new text", "Summary")
         assert res.get("result") == "Success"
         assert res.get("pageid") == 1234
+
+
+def test_updater_edit_page_ratelimit_retry():
+    updater = TamilWikiUpdater()
+    updater.csrf_token = "valid_csrf"
+
+    mock_rate_limit_resp = MagicMock(
+        json=lambda: {"error": {"code": "ratelimited", "info": "You've exceeded your rate limit."}},
+        headers={"Retry-After": "1"},
+        raise_for_status=lambda: None,
+    )
+    mock_success_resp = MagicMock(
+        json=lambda: {"edit": {"result": "Success", "pageid": 5678, "title": "Test"}},
+        raise_for_status=lambda: None,
+    )
+
+    with patch("time.sleep") as mock_sleep:
+        with patch.object(updater.session, "post", side_effect=[mock_rate_limit_resp, mock_success_resp]):
+            res = updater.edit_page("Test", "new text", "Summary")
+            assert res.get("result") == "Success"
+            assert res.get("pageid") == 5678
+            mock_sleep.assert_any_call(1)

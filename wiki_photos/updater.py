@@ -2,6 +2,7 @@
 
 import difflib
 import re
+import time
 from typing import Dict, Optional, Tuple, Any, List
 import requests
 from .api import DEFAULT_USER_AGENT, MediaWikiClient
@@ -265,19 +266,49 @@ class WikiUpdater:
         if minor:
             data["minor"] = 1
 
-        if self.client.request_delay > 0:
-            import time
-            time.sleep(self.client.request_delay)
+        max_edit_attempts = 4
+        last_error = "unknown error"
+        for attempt in range(max_edit_attempts):
+            if self.client.request_delay > 0:
+                time.sleep(self.client.request_delay)
 
-        res = self.session.post(self.api_url, data=data, timeout=self.client.timeout)
-        res.raise_for_status()
-        resp_data = res.json()
+            res = self.session.post(self.api_url, data=data, timeout=self.client.timeout)
+            res.raise_for_status()
+            resp_data = res.json()
 
-        if "error" in resp_data:
-            err = resp_data["error"]
-            raise RuntimeError(f"Edit failed on '{title}' ({self.wiki}.wikipedia.org): {err.get('info')} ({err.get('code')})")
+            if "error" in resp_data:
+                err = resp_data["error"]
+                code = err.get("code")
+                info = err.get("info", "")
+                last_error = f"{info} ({code})"
 
-        return resp_data.get("edit", {})
+                # Handle Wikimedia rate limiting (exponential backoff)
+                if code == "ratelimited" and attempt < max_edit_attempts - 1:
+                    retry_header = res.headers.get("Retry-After")
+                    wait_sec = int(retry_header) if retry_header and retry_header.isdigit() else max(10, 5 * (attempt + 1))
+                    print(f"    [!] Rate limited on {self.wiki}.wikipedia.org. Backing off for {wait_sec}s before retry (attempt {attempt + 1}/{max_edit_attempts})...")
+                    time.sleep(wait_sec)
+                    continue
+
+                # Handle Wikimedia database replication lag (maxlag)
+                if code == "maxlag" and attempt < max_edit_attempts - 1:
+                    retry_header = res.headers.get("Retry-After")
+                    wait_sec = int(retry_header) if retry_header and retry_header.isdigit() else 5
+                    print(f"    [!] Database replication lag on {self.wiki}.wikipedia.org. Waiting {wait_sec}s before retry...")
+                    time.sleep(wait_sec)
+                    continue
+
+                # Handle CSRF token expiration
+                if code in ("badtoken", "notoken") and attempt < max_edit_attempts - 1:
+                    self.csrf_token = self.get_csrf_token()
+                    data["token"] = self.csrf_token
+                    continue
+
+                raise RuntimeError(f"Edit failed on '{title}' ({self.wiki}.wikipedia.org): {info} ({code})")
+
+            return resp_data.get("edit", {})
+
+        raise RuntimeError(f"Edit failed on '{title}' ({self.wiki}.wikipedia.org) after {max_edit_attempts} attempts: {last_error}")
 
 
 # Backward-compatibility alias
